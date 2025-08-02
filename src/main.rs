@@ -1,10 +1,15 @@
-use std::{env, time::{Duration, Instant}};
+use std::{
+    env,
+    time::{Duration, Instant},
+};
 
 use sdl2::{keyboard::Keycode, pixels::Color};
 
 const PIXEL_SIZE: u32 = 4;
 const WIDTH: u32 = 160 * PIXEL_SIZE;
 const HEIGHT: u32 = 144 * PIXEL_SIZE;
+
+mod rust_boy;
 
 fn main() {
     let sdl_ctx = sdl2::init().unwrap();
