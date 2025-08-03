@@ -101,16 +101,43 @@ impl Registers {
 
 struct CPU {
     registers: Registers,
+    pc: u16,
+    memory: [u8; 0xFFFF],
 }
 
 impl CPU {
     fn new() -> Self {
         Self {
             registers: Registers::new(),
+            pc: 0x100,
+            memory: [0; 0xFFFF],
         }
     }
 
-    fn execute(&mut self, instruction: Instruction) {
+    fn cycle(&mut self) {
+        let mut byte = self.read_byte(self.pc);
+        let prefixed = byte == 0xCB;
+
+        if prefixed {
+            byte = self.read_byte(self.pc+1);
+        }
+
+        let next_pc = if let Some(instruction) = Instruction::from_byte(byte, prefixed) {
+            self.execute(instruction)
+        } else {
+            panic!("Unknown instruction: 0x{}{:x} found at: 0x{:x}", if prefixed {"cb"} else {""},byte, self.pc)
+        }
+
+        self.pc = next_pc;
+    }
+
+    fn read_byte(&self, address: u16) -> u8 {
+        self.memory[address as usize]
+    }
+
+    /// Executes the current instruction and returns the next value of the 
+    /// program counter
+    fn execute(&mut self, instruction: Instruction) -> u16 {
         match instruction {
             Instruction::ADD(target) => match target {
                 ArithmeticTarget::A => todo!(),
@@ -119,13 +146,34 @@ impl CPU {
                     let value = self.registers.c;
                     let new_value = self.add(value);
                     self.registers.a = new_value;
+                    self.pc.wrapping_add(1)
                 }
                 ArithmeticTarget::D => todo!(),
                 ArithmeticTarget::E => todo!(),
                 ArithmeticTarget::H => todo!(),
                 ArithmeticTarget::L => todo!(),
             },
-            _ => {}
+            Instruction::JP(condition) => {
+               let should_jump = match condition {
+                    JumpCondition::Always => true
+               }; 
+               self.jump(should_jump)
+            }
+            _ => {
+                self.pc
+            }
+        }
+    }
+
+    /// Returns the next value of the program counter
+    fn jump(&mut self, should_jump: bool) -> u16 {
+        if should_jump {
+            let lower = self.read_byte(self.pc+1) as u16;
+            let upper = self.read_byte(self.pc+2) as u16;
+            (upper << 8) | lower
+        } else {
+            // Just skip the 3 bytes of the jump instruction
+            self.pc.wrapping_add(3)
         }
     }
 
@@ -139,8 +187,39 @@ impl CPU {
     }
 }
 
+enum JumpCondition {
+    Always
+}
+
 enum Instruction {
     ADD(ArithmeticTarget),
+    JP(JumpCondition),
+}
+
+impl Instruction {
+    fn from_byte(byte: u8, prefixed: bool) -> Option<Self> {
+        if prefixed {
+            Instruction::from_byte_prefixed(byte)
+        } else {
+            Instruction::from_byte_non_prefixed(byte)
+        }
+    }
+
+    fn from_byte_prefixed(byte: u8) -> Option<Self> {
+        match byte {
+            // TODO: Add 
+            _ => None
+        }
+    }
+
+    fn from_byte_non_prefixed(byte: u8) -> Option<Self> {
+        match byte {
+            // TODO: Add the rest
+            0x81 => Some(Instruction::ADD(ArithmeticTarget::C)),
+            0xC3 => Some(Instruction::JP(JumpCondition::Always)),
+            _ => None
+        }
+    }
 }
 
 enum ArithmeticTarget {
