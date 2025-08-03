@@ -1,8 +1,14 @@
 #[derive(Default, Clone, Copy)]
 struct FlagsRegister {
+    /// Set to true if the result of the operation is 0
     zero: bool,
+    /// Set to true if the operation is a subtraction
     subtract: bool,
+    /// Set to true if there is an overflow from the lower four bits to the
+    /// upper four bits after the operation:
+    /// 0b10001111 -> 0b10010000
     half_carry: bool,
+    /// Set to true if an overflow did occur
     carry: bool,
 }
 
@@ -91,4 +97,58 @@ impl Registers {
         self.h = ((value & 0xFF00) >> 8) as u8;
         self.l = (value & 0xFF) as u8;
     }
+}
+
+struct CPU {
+    registers: Registers,
+}
+
+impl CPU {
+    fn new() -> Self {
+        Self {
+            registers: Registers::new(),
+        }
+    }
+
+    fn execute(&mut self, instruction: Instruction) {
+        match instruction {
+            Instruction::ADD(target) => match target {
+                ArithmeticTarget::A => todo!(),
+                ArithmeticTarget::B => todo!(),
+                ArithmeticTarget::C => {
+                    let value = self.registers.c;
+                    let new_value = self.add(value);
+                    self.registers.a = new_value;
+                }
+                ArithmeticTarget::D => todo!(),
+                ArithmeticTarget::E => todo!(),
+                ArithmeticTarget::H => todo!(),
+                ArithmeticTarget::L => todo!(),
+            },
+            _ => {}
+        }
+    }
+
+    fn add(&mut self, value: u8) -> u8 {
+        let (new_value, overflow) = self.registers.a.overflowing_add(value);
+        self.registers.f.zero = new_value == 0;
+        self.registers.f.subtract = false;
+        self.registers.f.carry = overflow;
+        self.registers.f.half_carry = (self.registers.a & 0xF) + (value & 0xF) > 0xF;
+        new_value
+    }
+}
+
+enum Instruction {
+    ADD(ArithmeticTarget),
+}
+
+enum ArithmeticTarget {
+    A,
+    B,
+    C,
+    D,
+    E,
+    H,
+    L,
 }
