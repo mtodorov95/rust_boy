@@ -102,6 +102,7 @@ impl Registers {
 struct CPU {
     registers: Registers,
     pc: u16,
+    sp: u16,
     memory: [u8; 0xFFFF],
 }
 
@@ -110,6 +111,7 @@ impl CPU {
         Self {
             registers: Registers::new(),
             pc: 0x100,
+            sp: 0x00,
             memory: [0; 0xFFFF],
         }
     }
@@ -119,20 +121,25 @@ impl CPU {
         let prefixed = byte == 0xCB;
 
         if prefixed {
-            byte = self.read_byte(self.pc+1);
+            byte = self.read_byte(self.pc + 1);
         }
 
         let next_pc = if let Some(instruction) = Instruction::from_byte(byte, prefixed) {
             self.execute(instruction)
         } else {
-            panic!("Unknown instruction: 0x{}{:x} found at: 0x{:x}", if prefixed {"cb"} else {""},byte, self.pc)
-        }
+            panic!(
+                "Unknown instruction: 0x{}{:x} found at: 0x{:x}",
+                if prefixed { "cb" } else { "" },
+                byte,
+                self.pc
+            )
+        };
 
         self.pc = next_pc;
     }
 
     fn read_next_byte(&self) -> u8 {
-        self.read_byte(self.pc+1)
+        self.read_byte(self.pc + 1)
     }
 
     fn read_byte(&self, address: u16) -> u8 {
@@ -143,40 +150,38 @@ impl CPU {
         self.memory[address as usize] = value;
     }
 
-    /// Executes the current instruction and returns the next value of the 
+    /// Executes the current instruction and returns the next value of the
     /// program counter
     fn execute(&mut self, instruction: Instruction) -> u16 {
         match instruction {
-            Instruction::LD(load_type) => {
-                match load_type {
-                    LoadType::Byte(source, target) => {
-                        let value = match source {
-                            LoadByteSource::A => self.registers.a,
-                            LoadByteSource::B => self.registers.b,
-                            LoadByteSource::C => self.registers.c,
-                            LoadByteSource::D => self.registers.d,
-                            LoadByteSource::E => self.registers.e,
-                            LoadByteSource::H => self.registers.h,
-                            LoadByteSource::L => self.registers.l,
-                            LoadByteSource::HL => self.read_byte(self.registers.get_hl()),
-                            LoadByteSource::D8 => self.read_next_byte(),
-                        };
-                        match target {
-                            LoadByteTarget::A => self.registers.a = value,
-                            LoadByteTarget::B => self.registers.b= value,
-                            LoadByteTarget::C => self.registers.c= value,
-                            LoadByteTarget::D => self.registers.d= value,
-                            LoadByteTarget::E => self.registers.e= value,
-                            LoadByteTarget::H => self.registers.h= value,
-                            LoadByteTarget::L => self.registers.l= value,
-                            LoadByteTarget::HL => self.write_byte(self.registers.get_hl(), value),
-                        };
+            Instruction::LD(load_type) => match load_type {
+                LoadType::Byte(source, target) => {
+                    let value = match source {
+                        LoadByteSource::A => self.registers.a,
+                        LoadByteSource::B => self.registers.b,
+                        LoadByteSource::C => self.registers.c,
+                        LoadByteSource::D => self.registers.d,
+                        LoadByteSource::E => self.registers.e,
+                        LoadByteSource::H => self.registers.h,
+                        LoadByteSource::L => self.registers.l,
+                        LoadByteSource::HL => self.read_byte(self.registers.get_hl()),
+                        LoadByteSource::D8 => self.read_next_byte(),
+                    };
+                    match target {
+                        LoadByteTarget::A => self.registers.a = value,
+                        LoadByteTarget::B => self.registers.b = value,
+                        LoadByteTarget::C => self.registers.c = value,
+                        LoadByteTarget::D => self.registers.d = value,
+                        LoadByteTarget::E => self.registers.e = value,
+                        LoadByteTarget::H => self.registers.h = value,
+                        LoadByteTarget::L => self.registers.l = value,
+                        LoadByteTarget::HL => self.write_byte(self.registers.get_hl(), value),
+                    };
 
-                        match source {
-                            LoadByteSource::D8 => self.pc.wrapping_add(2),
-                            _ => self.pc.wrapping_add(1)
-                        }
-                    },
+                    match source {
+                        LoadByteSource::D8 => self.pc.wrapping_add(2),
+                        _ => self.pc.wrapping_add(1),
+                    }
                 }
             },
             Instruction::ADD(target) => match target {
@@ -194,22 +199,55 @@ impl CPU {
                 ArithmeticTarget::L => todo!(),
             },
             Instruction::JP(condition) => {
-               let should_jump = match condition {
-                    JumpCondition::Always => true
-               }; 
-               self.jump(should_jump)
+                let should_jump = match condition {
+                    JumpCondition::Always => true,
+                };
+                self.jump(should_jump)
             }
-            _ => {
-                self.pc
+            Instruction::PUSH(target) => {
+                let value = match target {
+                    StackTarget::BC => self.registers.get_bc(),
+                    StackTarget::DE => self.registers.get_de(),
+                    StackTarget::HL => self.registers.get_hl(),
+                    StackTarget::AF => self.registers.get_af(),
+                };
+                self.push(value);
+                self.pc.wrapping_add(1)
             }
+            Instruction::POP(target) => {
+                let result = self.pop();
+                match target {
+                    StackTarget::BC => self.registers.set_bc(result),
+                    StackTarget::DE => self.registers.set_de(result),
+                    StackTarget::HL => self.registers.set_hl(result),
+                    StackTarget::AF => self.registers.set_af(result),
+                }
+                self.pc.wrapping_add(1)
+            }
+            _ => self.pc,
         }
+    }
+
+    fn push(&mut self, value: u16) {
+        self.sp = self.sp.wrapping_sub(1);
+        self.write_byte(self.sp, ((value & 0xFF00) >> 8) as u8);
+        self.sp = self.sp.wrapping_sub(1);
+        self.write_byte(self.sp, (value & 0x00FF) as u8);
+    }
+
+    fn pop(&mut self) -> u16 {
+        let lo = self.read_byte(self.sp) as u16;
+        self.sp = self.sp.wrapping_add(1);
+        let hi = self.read_byte(self.sp) as u16;
+        self.sp = self.sp.wrapping_add(1);
+        (hi << 8) | lo
     }
 
     /// Returns the next value of the program counter
     fn jump(&mut self, should_jump: bool) -> u16 {
         if should_jump {
-            let lower = self.read_byte(self.pc+1) as u16;
-            let upper = self.read_byte(self.pc+2) as u16;
+            let lower = self.read_byte(self.pc + 1) as u16;
+            let upper = self.read_byte(self.pc + 2) as u16;
             (upper << 8) | lower
         } else {
             // Just skip the 3 bytes of the jump instruction
@@ -228,13 +266,15 @@ impl CPU {
 }
 
 enum JumpCondition {
-    Always
+    Always,
 }
 
 enum Instruction {
     ADD(ArithmeticTarget),
     JP(JumpCondition),
     LD(LoadType),
+    PUSH(StackTarget),
+    POP(StackTarget),
 }
 
 impl Instruction {
@@ -248,8 +288,8 @@ impl Instruction {
 
     fn from_byte_prefixed(byte: u8) -> Option<Self> {
         match byte {
-            // TODO: Add 
-            _ => None
+            // TODO: Add
+            _ => None,
         }
     }
 
@@ -258,7 +298,7 @@ impl Instruction {
             // TODO: Add the rest
             0x81 => Some(Instruction::ADD(ArithmeticTarget::C)),
             0xC3 => Some(Instruction::JP(JumpCondition::Always)),
-            _ => None
+            _ => None,
         }
     }
 }
@@ -299,4 +339,11 @@ enum LoadByteSource {
 enum LoadType {
     //TODO: Add the rest of the load types
     Byte(LoadByteSource, LoadByteTarget),
+}
+
+enum StackTarget {
+    BC,
+    DE,
+    HL,
+    AF,
 }
