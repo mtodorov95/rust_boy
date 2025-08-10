@@ -131,14 +131,54 @@ impl CPU {
         self.pc = next_pc;
     }
 
+    fn read_next_byte(&self) -> u8 {
+        self.read_byte(self.pc+1)
+    }
+
     fn read_byte(&self, address: u16) -> u8 {
         self.memory[address as usize]
+    }
+
+    fn write_byte(&mut self, address: u16, value: u8) {
+        self.memory[address as usize] = value;
     }
 
     /// Executes the current instruction and returns the next value of the 
     /// program counter
     fn execute(&mut self, instruction: Instruction) -> u16 {
         match instruction {
+            Instruction::LD(load_type) => {
+                match load_type {
+                    LoadType::Byte(source, target) => {
+                        let value = match source {
+                            LoadByteSource::A => self.registers.a,
+                            LoadByteSource::B => self.registers.b,
+                            LoadByteSource::C => self.registers.c,
+                            LoadByteSource::D => self.registers.d,
+                            LoadByteSource::E => self.registers.e,
+                            LoadByteSource::H => self.registers.h,
+                            LoadByteSource::L => self.registers.l,
+                            LoadByteSource::HL => self.read_byte(self.registers.get_hl()),
+                            LoadByteSource::D8 => self.read_next_byte(),
+                        };
+                        match target {
+                            LoadByteTarget::A => self.registers.a = value,
+                            LoadByteTarget::B => self.registers.b= value,
+                            LoadByteTarget::C => self.registers.c= value,
+                            LoadByteTarget::D => self.registers.d= value,
+                            LoadByteTarget::E => self.registers.e= value,
+                            LoadByteTarget::H => self.registers.h= value,
+                            LoadByteTarget::L => self.registers.l= value,
+                            LoadByteTarget::HL => self.write_byte(self.registers.get_hl(), value),
+                        };
+
+                        match source {
+                            LoadByteSource::D8 => self.pc.wrapping_add(2),
+                            _ => self.pc.wrapping_add(1)
+                        }
+                    },
+                }
+            },
             Instruction::ADD(target) => match target {
                 ArithmeticTarget::A => todo!(),
                 ArithmeticTarget::B => todo!(),
@@ -194,6 +234,7 @@ enum JumpCondition {
 enum Instruction {
     ADD(ArithmeticTarget),
     JP(JumpCondition),
+    LD(LoadType),
 }
 
 impl Instruction {
@@ -230,4 +271,32 @@ enum ArithmeticTarget {
     E,
     H,
     L,
+}
+
+enum LoadByteTarget {
+    A,
+    B,
+    C,
+    D,
+    E,
+    H,
+    L,
+    HL,
+}
+
+enum LoadByteSource {
+    A,
+    B,
+    C,
+    D,
+    E,
+    H,
+    L,
+    HL,
+    D8,
+}
+
+enum LoadType {
+    //TODO: Add the rest of the load types
+    Byte(LoadByteSource, LoadByteTarget),
 }
