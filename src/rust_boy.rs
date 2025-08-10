@@ -138,6 +138,12 @@ impl CPU {
         self.pc = next_pc;
     }
 
+    fn read_next_word(&self) -> u16 {
+        let lo = self.read_byte(self.pc + 1) as u16;
+        let hi = self.read_byte(self.pc + 2) as u16;
+        (hi << 8) | lo
+    }
+
     fn read_next_byte(&self) -> u8 {
         self.read_byte(self.pc + 1)
     }
@@ -201,6 +207,7 @@ impl CPU {
             Instruction::JP(condition) => {
                 let should_jump = match condition {
                     JumpCondition::Always => true,
+                    _ => panic!("Add all jump conditions"),
                 };
                 self.jump(should_jump)
             }
@@ -224,7 +231,41 @@ impl CPU {
                 }
                 self.pc.wrapping_add(1)
             }
+            Instruction::CALL(condition) => {
+                let should_jump = match condition {
+                    JumpCondition::NotZero => !self.registers.f.zero,
+                    _ => panic!("Add all jump conditions"),
+                };
+                self.call(should_jump)
+            }
+            Instruction::RET(condition) => {
+                let should_jump = match condition {
+                    JumpCondition::NotZero => !self.registers.f.zero,
+                    _ => panic!("Add all jump conditions"),
+                };
+                self.ret(should_jump)
+            }
             _ => self.pc,
+        }
+    }
+
+    fn call(&mut self, should_jump: bool) -> u16 {
+        // The next address if we didn't have to jump.
+        // Skips the instruction and the 2 bytes for the jump address
+        let next_pc = self.pc.wrapping_add(3);
+        if should_jump {
+            self.push(next_pc);
+            self.read_next_word()
+        } else {
+            next_pc
+        }
+    }
+
+    fn ret(&mut self, should_jump: bool) -> u16 {
+        if should_jump {
+            self.pop()
+        } else {
+            self.pc.wrapping_add(1)
         }
     }
 
@@ -246,9 +287,7 @@ impl CPU {
     /// Returns the next value of the program counter
     fn jump(&mut self, should_jump: bool) -> u16 {
         if should_jump {
-            let lower = self.read_byte(self.pc + 1) as u16;
-            let upper = self.read_byte(self.pc + 2) as u16;
-            (upper << 8) | lower
+            self.read_next_word()
         } else {
             // Just skip the 3 bytes of the jump instruction
             self.pc.wrapping_add(3)
@@ -267,6 +306,10 @@ impl CPU {
 
 enum JumpCondition {
     Always,
+    NotZero,
+    NotCarry,
+    Zero,
+    Carry,
 }
 
 enum Instruction {
@@ -275,6 +318,8 @@ enum Instruction {
     LD(LoadType),
     PUSH(StackTarget),
     POP(StackTarget),
+    CALL(JumpCondition),
+    RET(JumpCondition),
 }
 
 impl Instruction {
