@@ -9,7 +9,7 @@ const PIXEL_SIZE: u32 = 4;
 const WIDTH: u32 = 160 * PIXEL_SIZE;
 const HEIGHT: u32 = 144 * PIXEL_SIZE;
 
-mod rust_boy;
+mod cpu;
 
 fn main() {
     let sdl_ctx = sdl2::init().unwrap();
@@ -32,6 +32,9 @@ fn main() {
         println!("Usage: rust_boy <path_to_rom>");
         return;
     }
+
+    let cpu = cpu::CPU::new();
+
     while running {
         let start = Instant::now();
 
