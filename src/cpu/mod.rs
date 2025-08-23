@@ -4,6 +4,8 @@ use instruction::{
 };
 use registers::Registers;
 
+use crate::gpu::{GPU, VRAM_END, VRAM_START};
+
 mod instruction;
 mod registers;
 
@@ -12,6 +14,7 @@ pub struct CPU {
     pc: u16,
     sp: u16,
     memory: [u8; 0xFFFF],
+    gpu: GPU,
     is_halted: bool,
 }
 
@@ -21,6 +24,7 @@ impl CPU {
             registers: Registers::new(),
             pc: 0x100,
             sp: 0x00,
+            gpu: GPU::new(),
             memory: [0; 0xFFFF],
             is_halted: false,
         }
@@ -61,11 +65,21 @@ impl CPU {
     }
 
     fn read_byte(&self, address: u16) -> u8 {
-        self.memory[address as usize]
+        let address = address as usize;
+        match address {
+            VRAM_START..VRAM_END => self.gpu.read_vram(address - VRAM_START),
+            _ => panic!("Unsupported memory area"),
+        }
+        //self.memory[address as usize]
     }
 
     fn write_byte(&mut self, address: u16, value: u8) {
-        self.memory[address as usize] = value;
+        let address = address as usize;
+        match address {
+            VRAM_START..VRAM_END => self.gpu.write_vram(address - VRAM_START, value),
+            _ => panic!("Unsupported memory area"),
+        }
+        //self.memory[address as usize] = value;
     }
 
     /// Executes the current instruction and returns the next value of the

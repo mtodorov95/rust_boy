@@ -10,6 +10,7 @@ const WIDTH: u32 = 160 * PIXEL_SIZE;
 const HEIGHT: u32 = 144 * PIXEL_SIZE;
 
 mod cpu;
+mod gpu;
 
 fn main() {
     let sdl_ctx = sdl2::init().unwrap();
