@@ -104,6 +104,7 @@ struct CPU {
     pc: u16,
     sp: u16,
     memory: [u8; 0xFFFF],
+    is_halted: bool,
 }
 
 impl CPU {
@@ -113,6 +114,7 @@ impl CPU {
             pc: 0x100,
             sp: 0x00,
             memory: [0; 0xFFFF],
+            is_halted: false,
         }
     }
 
@@ -135,7 +137,9 @@ impl CPU {
             )
         };
 
-        self.pc = next_pc;
+        if (!self.is_halted) {
+            self.pc = next_pc;
+        }
     }
 
     fn read_next_word(&self) -> u16 {
@@ -160,6 +164,11 @@ impl CPU {
     /// program counter
     fn execute(&mut self, instruction: Instruction) -> u16 {
         match instruction {
+            Instruction::NOP => self.pc.wrapping_add(1),
+            Instruction::HALT => {
+                self.is_halted = true;
+                self.pc.wrapping_add(1)
+            }
             Instruction::LD(load_type) => match load_type {
                 LoadType::Byte(source, target) => {
                     let value = match source {
@@ -313,6 +322,8 @@ enum JumpCondition {
 }
 
 enum Instruction {
+    NOP,
+    HALT,
     ADD(ArithmeticTarget),
     JP(JumpCondition),
     LD(LoadType),
